@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>동탄 날씨</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 30px;
+    }
+    .weather-box {
+      background: #f0f8ff;
+      border-radius: 16px;
+      padding: 20px;
+      margin: 20px auto;
+      width: 300px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    .weather-img {
+      width: 80px;
+      height: 80px;
+      margin: 10px auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>동탄 날씨</h1>
+  <div id="weather-container"></div>
+
+  <script>
+    const serviceKey = "UX0oUh7ZWRuQW2qnng2rzw8U14zs2TmY9DYi8Eqs0SDQpo1wMe0l/BtVqaYcl7LYEJP0wysrk3xmQFgeE5iTJQ==";
+
+    function formatDate(date) {
+      const yyyy = date.getFullYear();
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const dd = String(date.getDate()).padStart(2, '0');
+      return `${yyyy}${mm}${dd}`;
+    }
+
+    function getBaseTime() {
+      const hour = new Date().getHours();
+      if (hour < 2) return "2300";
+      else if (hour < 5) return "0200";
+      else if (hour < 8) return "0500";
+      else if (hour < 11) return "0800";
+      else if (hour < 14) return "1100";
+      else if (hour < 17) return "1400";
+      else if (hour < 20) return "1700";
+      else if (hour < 23) return "2000";
+      else return "2300";
+    }
+
+    function getDatesToFetch() {
+      const today = new Date();
+      return [
+        { label: "오늘", date: new Date(today) },
+        { label: "내일", date: new Date(today.setDate(today.getDate() + 1)) },
+        { label: "모레", date: new Date(today.setDate(today.getDate() + 1)) }
+      ];
+    }
+
+    function skyText(sky, pty) {
+      if (pty === "1") return "비";
+      if (pty === "2") return "비/눈";
+      if (pty === "3") return "눈";
+      if (pty === "4") return "소나기";
+      switch (sky) {
+        case "1": return "맑음";
+        case "3": return "구름 많음";
+        case "4": return "흐림";
+        default: return "정보 없음";
+      }
+    }
+
+    function getWeatherImage(sky, pty) {
+      if (pty === "1" || pty === "4") return "rain.png";
+      if (pty === "2" || pty === "3") return "snow.png";
+      if (sky === "1") return "sunny.png";
+      if (sky === "3") return "cloudy.png";
+      if (sky === "4") return "overcast.png";
+      return "unknown.png";
+    }
+
+    async function fetchWeather() {
+      const baseDate = formatDate(new Date());
+      const baseTime = getBaseTime();
+      const nx = 60, ny = 120;
+
+      const url = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${serviceKey}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${nx}&ny=${ny}`;
+      const res = await fetch(url);
+      const json = await res.json();
+      const items = json.response.body.items.item;
+
+      const container = document.getElementById("weather-container");
+      container.innerHTML = "";
+
+      const days = getDatesToFetch();
+
+      for (const day of days) {
+        const dateStr = formatDate(day.date);
+        const dailyItems = items.filter(i => i.fcstDate === dateStr && i.fcstTime === "1500");
+
+        const tmp = dailyItems.find(i => i.category === "TMP");
+        const sky = dailyItems.find(i => i.category === "SKY");
+        const pty = dailyItems.find(i => i.category === "PTY");
+
+        const weatherImg = getWeatherImage(sky?.fcstValue, pty?.fcstValue);
+        const weatherText = skyText(sky?.fcstValue, pty?.fcstValue);
+
+        const box = document.createElement("div");
+        box.className = "weather-box";
+
+        box.innerHTML = `
+          <h2>${day.label} (${dateStr})</h2>
+          <img src="images/${weatherImg}" alt="날씨 이미지" class="weather-img">
+          <p>기온: ${tmp?.fcstValue ?? "정보 없음"}℃</p>
+          <p>날씨: ${weatherText}</p>
+        `;
+
+        container.appendChild(box);
+      }
+    }
+
+    fetchWeather();
+  </script>
+</body>
+</html>
