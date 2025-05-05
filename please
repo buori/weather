@@ -67,7 +67,7 @@
       if (pty === "4") return "소나기";
       switch (sky) {
         case "1": return "맑음";
-        case "3": return "구름 많음";
+        case "3":
         case "4": return "흐림";
         default: return "정보 없음";
       }
@@ -78,7 +78,7 @@
       if (pty === "2" || pty === "3") return "snow.png";
       if (sky === "1") return "sunny.png";
       if (sky === "3") return "cloudy.png";
-      if (sky === "4") return "overcast.png";
+      if (sky === "3" || sky === "4") return "cloudy.png";
       return "unknown.png";
     }
 
