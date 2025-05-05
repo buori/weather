@@ -4,145 +4,137 @@
   <meta charset="UTF-8">
   <title>동탄의 날씨</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
-    h1, h2 { text-align: center; }
-    #summary-weather > div {
-      display: inline-block;
-      width: 30%;
-      text-align: center;
-      margin: 10px;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      padding: 10px;
-    }
-    #hourly-weather > div {
-      margin: 6px 0;
-    }
-    img { width: 60px; height: 60px; }
+    body { font-family: sans-serif; text-align: center; padding: 2em; }
+    .loading { font-size: 1.2em; margin-top: 2em; }
+    .weather-container { display: flex; justify-content: space-around; margin-top: 2em; flex-wrap: wrap; }
+    .weather-box { border: 1px solid #ccc; border-radius: 10px; padding: 1em; width: 250px; margin: 1em; box-shadow: 2px 2px 6px rgba(0,0,0,0.1); }
+    .weather-box img { width: 80px; height: 80px; }
+    .title { font-size: 1.5em; margin-bottom: 0.5em; }
   </style>
 </head>
 <body>
-  <h1>동탄의 날씨</h1>
-
-  <!-- 로딩 중 -->
-  <div id="loading" style="text-align:center; margin: 20px;">
-    🌤️ 날씨 정보를 불러오는 중... (최대 3~4분 소요될 수 있습니다)
-  </div>
-
-  <!-- 날씨 데이터 -->
-  <div id="content" style="display: none;">
-    <div id="summary-weather"></div>
-    <div id="detailed-weather">
-      <h2>오늘 시간대별 날씨</h2>
-      <div id="hourly-weather"></div>
-    </div>
-  </div>
+  <h1>🌤️ 동탄의 날씨</h1>
+  <div class="loading" id="loading">🌤️ 날씨 정보를 불러오는 중... (최대 3~4분 소요될 수 있습니다)</div>
+  <div class="weather-container" id="weather-container" style="display:none;"></div>
 
   <script>
-    function getBaseTime() {
-      const now = new Date();
-      const hour = now.getHours();
-      const baseTimes = ["0200", "0500", "0800", "1100", "1400", "1700", "2000", "2300"];
-      const cutoffs = [2, 5, 8, 11, 14, 17, 20, 23];
+    const WEATHER_API_KEY = "UX0oUh7ZWRuQW2qnng2rzw8U14zs2TmY9DYi8Eqs0SDQpo1wMe0l/BtVqaYcl7LYEJP0wysrk3xmQFgeE5iTJQ==";
+    const AIR_API_KEY = "UX0oUh7ZWRuQW2qnng2rzw8U14zs2TmY9DYi8Eqs0SDQpo1wMe0l/BtVqaYcl7LYEJP0wysrk3xmQFgeE5iTJQ==
+";
 
-      for (let i = baseTimes.length - 1; i >= 0; i--) {
-        if (hour >= cutoffs[i]) {
-          return {
-            baseDate: `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`,
-            baseTime: baseTimes[i]
-          };
-        }
+    const WEATHER_IMG = {
+      1: "sunny.png",
+      3: "cloudy.png",
+      4: "overcast.png",
+      "비": "rain.png",
+      "눈": "snow.png",
+      "비/눈": "snow.png",
+      "알 수 없음": "unknown.png"
+    };
+
+    const getDateStr = (offset) => {
+      const date = new Date();
+      date.setDate(date.getDate() + offset);
+      return date.toISOString().split("T")[0];
+    };
+
+    const getWeatherImage = (sky, pty) => {
+      if (pty !== "0") {
+        if (["1", "4"].includes(pty)) return WEATHER_IMG["비"];
+        if (["2", "3"].includes(pty)) return WEATHER_IMG["눈"];
+        return WEATHER_IMG["알 수 없음"];
       }
+      return WEATHER_IMG[sky] || WEATHER_IMG["알 수 없음"];
+    };
 
-      const yesterday = new Date(now);
-      yesterday.setDate(now.getDate() - 1);
-      return {
-        baseDate: `${yesterday.getFullYear()}${String(yesterday.getMonth() + 1).padStart(2, '0')}${String(yesterday.getDate()).padStart(2, '0')}`,
-        baseTime: "2300"
-      };
-    }
+    const fetchAirQuality = async () => {
+      try {
+        const res = await fetch(`https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty?serviceKey=${AIR_API_KEY}&returnType=json&numOfRows=100&pageNo=1&sidoName=경기&ver=1.0`);
+        const data = await res.json();
+        const dongtan = data.response.body.items.find(item => item.stationName.includes("동탄"));
+        return {
+          PM10: dongtan.pm10Value ?? "알 수 없음",
+          PM25: dongtan.pm25Value ?? "알 수 없음"
+        };
+      } catch (error) {
+        console.error("미세먼지 정보 실패:", error);
+        return {
+          PM10: "알 수 없음",
+          PM25: "알 수 없음"
+        };
+      }
+    };
 
-    function getWeatherImage(sky, pty) {
-      if (pty === "1" || pty === "4") return "images/rain.png";
-      if (pty === "2" || pty === "3") return "images/snow.png";
-      if (sky === "1") return "images/sunny.png";
-      if (sky === "3" || sky === "4") return "images/cloudy.png";
-      return "images/unknown.png";
-    }
-
-    function skyText(sky, pty) {
-      if (pty === "1" || pty === "4") return "비";
-      if (pty === "2") return "비/눈";
-      if (pty === "3") return "눈";
-      if (sky === "1") return "맑음";
-      if (sky === "3" || sky === "4") return "흐림";
-      return "정보 없음";
-    }
-
-    async function fetchWeather() {
-      const serviceKey = "UX0oUh7ZWRuQW2qnng2rzw8U14zs2TmY9DYi8Eqs0SDQpo1wMe0l/BtVqaYcl7LYEJP0wysrk3xmQFgeE5iTJQ==";
-      const nx = 60, ny = 120;
-      const now = new Date();
-      const { baseDate, baseTime } = getBaseTime();
-
-      const url = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${serviceKey}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${nx}&ny=${ny}`;
+    const fetchWeather = async () => {
+      const container = document.getElementById("weather-container");
+      const loading = document.getElementById("loading");
 
       try {
-        const res = await fetch(url);
-        const json = await res.json();
-        const items = json.response.body.items.item;
+        const baseDate = new Date();
+        const dateStr = baseDate.toISOString().slice(0,10).replace(/-/g, '');
+        const baseTime = "0500";
+        const nx = 61, ny = 120; // 동탄 격자 좌표
 
-        const summaryContainer = document.getElementById("summary-weather");
-        const days = ["오늘", "내일", "모레"];
-        for (let i = 0; i < 3; i++) {
-          const date = new Date();
-          date.setDate(date.getDate() + i);
-          const dateStr = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
-          const data = items.filter(item => item.fcstDate === dateStr && item.fcstTime === "1500");
+        const res = await fetch(`https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${WEATHER_API_KEY}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${dateStr}&base_time=${baseTime}&nx=${nx}&ny=${ny}`);
+        const data = await res.json();
 
-          const sky = data.find(i => i.category === "SKY")?.fcstValue;
-          const pty = data.find(i => i.category === "PTY")?.fcstValue;
-          const tmp = data.find(i => i.category === "TMP")?.fcstValue;
+        const items = data.response.body.items.item;
+        const weatherByDate = {};
 
-          const box = document.createElement("div");
-          box.innerHTML = `
-            <h3>${days[i]} 날씨</h3>
-            <img src="${getWeatherImage(sky, pty)}" alt="">
-            <p>${skyText(sky, pty)}</p>
-            <p>기온: ${tmp ? tmp + "℃" : "정보 없음"}</p>
+        for (let offset = 0; offset <= 2; offset++) {
+          const date = getDateStr(offset).replace(/-/g, '');
+          weatherByDate[date] = {
+            TMP: null, SKY: null, PTY: "0", REH: null, WSD: null,
+            PM10: "로딩 중", PM25: "로딩 중"
+          };
+        }
+
+        items.forEach(item => {
+          const fcstDate = item.fcstDate;
+          const category = item.category;
+          if (weatherByDate[fcstDate] && weatherByDate[fcstDate][category] === null) {
+            weatherByDate[fcstDate][category] = item.fcstValue;
+          }
+        });
+
+        // 미세먼지 불러오기
+        const airQuality = await fetchAirQuality();
+        for (let date in weatherByDate) {
+          weatherByDate[date].PM10 = airQuality.PM10;
+          weatherByDate[date].PM25 = airQuality.PM25;
+        }
+
+        const labels = ["오늘 날씨", "내일 날씨", "모레 날씨"];
+        let i = 0;
+
+        for (let key of Object.keys(weatherByDate)) {
+          const w = weatherByDate[key];
+          const image = getWeatherImage(w.SKY, w.PTY);
+          container.innerHTML += `
+            <div class="weather-box">
+              <div class="title">${labels[i]}</div>
+              <img src="images/${image}" alt="날씨 아이콘" />
+              <div>🌡️ 온도: ${w.TMP ?? "-"}℃</div>
+              <div>🌥️ 하늘 상태: ${w.SKY}</div>
+              <div>💧 습도: ${w.REH ?? "-"}%</div>
+              <div>🍃 풍속: ${w.WSD ?? "-"} m/s</div>
+              <div>🌫️ 미세먼지: ${w.PM10}</div>
+              <div>🌁 초미세먼지: ${w.PM25}</div>
+            </div>
           `;
-          summaryContainer.appendChild(box);
+          i++;
         }
 
-        const hourlyContainer = document.getElementById("hourly-weather");
-        const currentHour = now.getHours();
-        const hourList = items
-          .filter(i => i.category === "TMP" && i.fcstDate === baseDate)
-          .map(i => i.fcstTime)
-          .filter(t => parseInt(t) >= currentHour * 100)
-          .slice(0, 6);
+        loading.style.display = "none";
+        container.style.display = "flex";
 
-        for (const time of hourList) {
-          const data = items.filter(item => item.fcstDate === baseDate && item.fcstTime === time);
-          const tmp = data.find(i => i.category === "TMP")?.fcstValue;
-          const sky = data.find(i => i.category === "SKY")?.fcstValue;
-          const pty = data.find(i => i.category === "PTY")?.fcstValue;
-          const reh = data.find(i => i.category === "REH")?.fcstValue;
-
-          const row = document.createElement("div");
-          row.innerHTML = `<strong>${time.slice(0, 2)}시</strong> | 기온: ${tmp ?? "-"}℃ | 날씨: ${skyText(sky, pty)} | 습도: ${reh ?? "-"}%`;
-          hourlyContainer.appendChild(row);
-        }
-
-      } catch (err) {
-        console.error("날씨 데이터를 불러오지 못했습니다.", err);
-      } finally {
-        document.getElementById("loading").style.display = "none";
-        document.getElementById("content").style.display = "block";
+      } catch (error) {
+        console.error("날씨 정보를 불러오는 데 실패:", error);
+        loading.innerText = "❌ 날씨 정보를 불러오는 데 실패했습니다.";
       }
-    }
+    };
 
-    fetchWeather();
+    window.onload = fetchWeather;
   </script>
 </body>
 </html>
