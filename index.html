@@ -25,7 +25,22 @@
   </style>
 </head>
 <body>
-  <h1>동탄 날씨</h1>
+  <script>
+  // 날짜 제목 표시용 함수 추가
+  function setTitleWithDate() {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const formattedDate = `${yyyy}-${mm}-${dd}`;
+    
+    const titleElement = document.getElementById("page-title");
+    titleElement.textContent = `${formattedDate}의 동탄 날씨`;
+  }
+
+  setTitleWithDate();
+  fetchWeather(); // 기존 호출 코드 유지
+</script>
   <div id="weather-container">날씨 정보를 불러오는 중...(3-4분 소요 예정)</div>
 
   <script>
