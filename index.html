@@ -18,9 +18,7 @@
   <div class="weather-container" id="weather-container" style="display:none;"></div>
 
   <script>
-    const WEATHER_API_KEY = "UX0oUh7ZWRuQW2qnng2rzw8U14zs2TmY9DYi8Eqs0SDQpo1wMe0l/BtVqaYcl7LYEJP0wysrk3xmQFgeE5iTJQ==";
-    const AIR_API_KEY = "UX0oUh7ZWRuQW2qnng2rzw8U14zs2TmY9DYi8Eqs0SDQpo1wMe0l/BtVqaYcl7LYEJP0wysrk3xmQFgeE5iTJQ==
-";
+    const WEATHER_API_KEY = "UX0oUh7ZWRuQW2qnng2rzw8U14zs2TmY9DYi8Eqs0SDQpo1wMe0l/BtVqaYcl7LYEJP0wysrk3xmQFgeE5iTJQ=="; // 기상청 API 키
 
     const WEATHER_IMG = {
       1: "sunny.png",
@@ -47,24 +45,6 @@
       return WEATHER_IMG[sky] || WEATHER_IMG["알 수 없음"];
     };
 
-    const fetchAirQuality = async () => {
-      try {
-        const res = await fetch(`https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty?serviceKey=${AIR_API_KEY}&returnType=json&numOfRows=100&pageNo=1&sidoName=경기&ver=1.0`);
-        const data = await res.json();
-        const dongtan = data.response.body.items.find(item => item.stationName.includes("동탄"));
-        return {
-          PM10: dongtan.pm10Value ?? "알 수 없음",
-          PM25: dongtan.pm25Value ?? "알 수 없음"
-        };
-      } catch (error) {
-        console.error("미세먼지 정보 실패:", error);
-        return {
-          PM10: "알 수 없음",
-          PM25: "알 수 없음"
-        };
-      }
-    };
-
     const fetchWeather = async () => {
       const container = document.getElementById("weather-container");
       const loading = document.getElementById("loading");
@@ -84,8 +64,7 @@
         for (let offset = 0; offset <= 2; offset++) {
           const date = getDateStr(offset).replace(/-/g, '');
           weatherByDate[date] = {
-            TMP: null, SKY: null, PTY: "0", REH: null, WSD: null,
-            PM10: "로딩 중", PM25: "로딩 중"
+            TMP: null, SKY: null, PTY: "0", REH: null, WSD: null
           };
         }
 
@@ -96,13 +75,6 @@
             weatherByDate[fcstDate][category] = item.fcstValue;
           }
         });
-
-        // 미세먼지 불러오기
-        const airQuality = await fetchAirQuality();
-        for (let date in weatherByDate) {
-          weatherByDate[date].PM10 = airQuality.PM10;
-          weatherByDate[date].PM25 = airQuality.PM25;
-        }
 
         const labels = ["오늘 날씨", "내일 날씨", "모레 날씨"];
         let i = 0;
@@ -118,8 +90,6 @@
               <div>🌥️ 하늘 상태: ${w.SKY}</div>
               <div>💧 습도: ${w.REH ?? "-"}%</div>
               <div>🍃 풍속: ${w.WSD ?? "-"} m/s</div>
-              <div>🌫️ 미세먼지: ${w.PM10}</div>
-              <div>🌁 초미세먼지: ${w.PM25}</div>
             </div>
           `;
           i++;
