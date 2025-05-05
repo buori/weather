@@ -41,10 +41,25 @@
   <script>
     function getBaseTime() {
       const now = new Date();
-      const hours = ["0900", "1200", "1500", "1800", "2100"];
+      const hour = now.getHours();
       const baseTimes = ["0200", "0500", "0800", "1100", "1400", "1700", "2000", "2300"];
-      const index = Math.floor(hour / 3) - 1;
-      return baseTimes[Math.max(index, 0)];
+      const cutoffs = [2, 5, 8, 11, 14, 17, 20, 23];
+
+      for (let i = baseTimes.length - 1; i >= 0; i--) {
+        if (hour >= cutoffs[i]) {
+          return {
+            baseDate: `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`,
+            baseTime: baseTimes[i]
+          };
+        }
+      }
+
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      return {
+        baseDate: `${yesterday.getFullYear()}${String(yesterday.getMonth() + 1).padStart(2, '0')}${String(yesterday.getDate()).padStart(2, '0')}`,
+        baseTime: "2300"
+      };
     }
 
     function getWeatherImage(sky, pty) {
@@ -65,11 +80,10 @@
     }
 
     async function fetchWeather() {
-      const serviceKey = "UX0oUh7ZWRuQW2qnng2rzw8U14zs2TmY9DYi8Eqs0SDQpo1wMe0l/BtVqaYcl7LYEJP0wysrk3xmQFgeE5iTJQ=="; // 👉 반드시 본인의 API 키로 대체
-      const nx = 60, ny = 120; // 동탄
+      const serviceKey = "UX0oUh7ZWRuQW2qnng2rzw8U14zs2TmY9DYi8Eqs0SDQpo1wMe0l/BtVqaYcl7LYEJP0wysrk3xmQFgeE5iTJQ==";
+      const nx = 60, ny = 120;
       const now = new Date();
-      const baseDate = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-      const baseTime = getBaseTime();
+      const { baseDate, baseTime } = getBaseTime();
 
       const url = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${serviceKey}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${nx}&ny=${ny}`;
 
@@ -78,7 +92,6 @@
         const json = await res.json();
         const items = json.response.body.items.item;
 
-        // 요약 날씨 (오늘/내일/모레)
         const summaryContainer = document.getElementById("summary-weather");
         const days = ["오늘", "내일", "모레"];
         for (let i = 0; i < 3; i++) {
@@ -96,15 +109,20 @@
             <h3>${days[i]} 날씨</h3>
             <img src="${getWeatherImage(sky, pty)}" alt="">
             <p>${skyText(sky, pty)}</p>
-            <p>기온: ${tmp ?? '-'}℃</p>
+            <p>기온: ${tmp ? tmp + "℃" : "정보 없음"}</p>
           `;
           summaryContainer.appendChild(box);
         }
 
-        // 시간대별 날씨 (오늘)
         const hourlyContainer = document.getElementById("hourly-weather");
-        const hours = ["0100", "0400", "0700", "1000", "1300", "1600", "1900", "2200"];
-        for (const time of hours) {
+        const currentHour = now.getHours();
+        const hourList = items
+          .filter(i => i.category === "TMP" && i.fcstDate === baseDate)
+          .map(i => i.fcstTime)
+          .filter(t => parseInt(t) >= currentHour * 100)
+          .slice(0, 6);
+
+        for (const time of hourList) {
           const data = items.filter(item => item.fcstDate === baseDate && item.fcstTime === time);
           const tmp = data.find(i => i.category === "TMP")?.fcstValue;
           const sky = data.find(i => i.category === "SKY")?.fcstValue;
@@ -112,7 +130,7 @@
           const reh = data.find(i => i.category === "REH")?.fcstValue;
 
           const row = document.createElement("div");
-          row.innerHTML = `<strong>${time.slice(0, 2)}시</strong> | 기온: ${tmp ?? '-'}℃ | 날씨: ${skyText(sky, pty)} | 습도: ${reh ?? '-'}%`;
+          row.innerHTML = `<strong>${time.slice(0, 2)}시</strong> | 기온: ${tmp ?? "-"}℃ | 날씨: ${skyText(sky, pty)} | 습도: ${reh ?? "-"}%`;
           hourlyContainer.appendChild(row);
         }
 
