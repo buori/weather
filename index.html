@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <title>현재 동탄의 날씨</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>동탄 날씨</title>
   <style>
     body {
       font-family: sans-serif;
@@ -38,14 +39,15 @@
 </head>
 <body>
   <h1 id="title">동탄 날씨</h1>
-  <div class="loading" id="loading">🌤️ 날씨 정보를 불러오는 중...</div>
+  <div class="loading" id="loading">🌤️ 날씨 정보를 불러오는 중... (최대 3~4분 소요될 수 있습니다)</div>
   <div id="weatherContainer" style="display:none;"></div>
 
   <script>
-    const serviceKey = '여기에_기상청_API_서비스키_입력'; // 반드시 인코딩된 서비스키 사용
-    const nx = 60, ny = 120;
-
-    const baseTimes = ["2300", "2000", "1700", "1400", "1100", "0800", "0500", "0200"];
+    // 서비스 키를 인코딩된 형태로 넣어야 함
+    const rawServiceKey = 'UX0oUh7ZWRuQW2qnng2rzw8U14zs2TmY9DYi8Eqs0SDQpo1wMe0l%2FBtVqaYcl7LYEJP0wysrk3xmQFgeE5iTJQ%3D%3D
+';
+    const serviceKey = encodeURIComponent(rawServiceKey);  // 서비스 키 인코딩
+    const nx = 60, ny = 120; // 동탄 좌표
 
     function formatDate(date) {
       const yyyy = date.getFullYear();
@@ -54,12 +56,16 @@
       return `${yyyy}${mm}${dd}`;
     }
 
-    function getLatestBaseTime() {
-      const now = new Date();
-      const hour = now.getHours();
-      for (let base of baseTimes) {
-        if (hour >= parseInt(base.slice(0, 2))) return base;
-      }
+    function getBaseTime() {
+      const hour = new Date().getHours();
+      if (hour < 2) return "2300";
+      if (hour < 5) return "0200";
+      if (hour < 8) return "0500";
+      if (hour < 11) return "0800";
+      if (hour < 14) return "1100";
+      if (hour < 17) return "1400";
+      if (hour < 20) return "1700";
+      if (hour < 23) return "2000";
       return "2300";
     }
 
@@ -67,50 +73,35 @@
       if (pty === "1" || pty === "4") return "rain.png";
       if (pty === "3") return "snow.png";
       if (sky === "1") return "sunny.png";
-      if (sky === "3" || sky === "4") return "cloudy.png";
+      if (sky === "3" || sky === "4") return "cloudy.png"; // 구름 많음과 흐림 통합
       return "unknown.png";
     }
 
-    async function fetchWeather() {
-      const now = new Date();
-      const baseDate = formatDate(now);
-      const baseTime = getLatestBaseTime();
+    async function fetchWeather(date, label) {
+      const base_date = formatDate(new Date());
+      const base_time = getBaseTime();
 
-      const url = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${serviceKey}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${nx}&ny=${ny}`;
+      const url = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${serviceKey}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${base_date}&base_time=${base_time}&nx=${nx}&ny=${ny}`;
 
       const res = await fetch(url);
-      const text = await res.text();
-
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        console.error("기상청 응답이 JSON이 아닙니다. 응답 내용:", text);
-        throw new Error("JSON 파싱 오류: 서비스키 또는 요청 URL이 잘못됐을 가능성.");
-      }
-
+      const data = await res.json();
       const items = data.response.body.items.item;
-      const nowHour = now.getHours();
-      const targetDate = formatDate(now);
 
-      const sameDateItems = items.filter(i => i.fcstDate === targetDate);
-      const availableTimes = [...new Set(sameDateItems.map(i => i.fcstTime))];
-      const closestFcstTime = availableTimes.reduce((prev, curr) => {
-        const prevDiff = Math.abs(parseInt(prev) - nowHour * 100);
-        const currDiff = Math.abs(parseInt(curr) - nowHour * 100);
-        return currDiff < prevDiff ? curr : prev;
-      });
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() + date);
+      const targetDateStr = formatDate(targetDate);
 
-      const filtered = sameDateItems.filter(i => i.fcstTime === closestFcstTime);
-      const weather = { TMP: '오류', SKY: '', PTY: '', REH: '오류', WSD: '오류' };
-
+      const filtered = items.filter(i => i.fcstDate === targetDateStr && i.fcstTime === "1500");
+      const weather = {
+        TMP: '정보 없음', SKY: '', PTY: '', REH: '정보 없음', WSD: '정보 없음'
+      };
       filtered.forEach(item => {
         if (weather[item.category] !== undefined) weather[item.category] = item.fcstValue;
       });
 
       const icon = getWeatherIcon(weather.SKY, weather.PTY);
       return {
-        title: `현재 동탄의 날씨 (${String(parseInt(closestFcstTime) / 100).padStart(2, '0')}시 기준)`,
+        label,
         temperature: weather.TMP + "°C",
         humidity: weather.REH + "%",
         wind: weather.WSD + "m/s",
@@ -119,28 +110,31 @@
     }
 
     async function displayWeather() {
-      try {
-        const data = await fetchWeather();
-        document.getElementById("title").textContent = data.title;
+      const today = new Date();
+      const title = `현재 동탄 날씨: ${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일`;
+      document.getElementById("title").textContent = title;
 
+      const todayData = await fetchWeather(0, "오늘 날씨");
+      const tomorrowData = await fetchWeather(1, "내일 날씨");
+
+      const container = document.getElementById("weatherContainer");
+      [todayData, tomorrowData].forEach(data => {
         const box = document.createElement("div");
         box.className = "weather-box";
         box.innerHTML = `
+          <h2>${data.label}</h2>
           <img src="images/${data.icon}" alt="날씨 아이콘">
           <p>🌡️ 온도: ${data.temperature}</p>
           <p>💧 습도: ${data.humidity}</p>
           <p>🌬️ 풍속: ${data.wind}</p>
         `;
-
-        const container = document.getElementById("weatherContainer");
         container.appendChild(box);
-        document.getElementById("loading").style.display = "none";
-        container.style.display = "flex";
-        container.style.justifyContent = "center";
-      } catch (e) {
-        document.getElementById("loading").textContent = "⚠️ 날씨 정보를 불러올 수 없습니다.";
-        console.error("에러 발생:", e);
-      }
+      });
+
+      document.getElementById("loading").style.display = "none";
+      container.style.display = "flex";
+      container.style.justifyContent = "center";
+      container.style.flexWrap = "wrap";
     }
 
     displayWeather();
