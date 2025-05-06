@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
   <title>현재 동탄의 날씨</title>
   <style>
     body {
@@ -43,8 +42,8 @@
   <div id="weatherContainer" style="display:none;"></div>
 
   <script>
-    const serviceKey = '여기에_기상청_API_서비스키_입력';
-    const nx = 60, ny = 120; // 동탄
+    const serviceKey = '여기에_기상청_API_서비스키_입력'; // 반드시 인코딩된 서비스키 사용
+    const nx = 60, ny = 120;
 
     const baseTimes = ["2300", "2000", "1700", "1400", "1100", "0800", "0500", "0200"];
 
@@ -61,7 +60,7 @@
       for (let base of baseTimes) {
         if (hour >= parseInt(base.slice(0, 2))) return base;
       }
-      return "2300"; // 새벽 2시 이전
+      return "2300";
     }
 
     function getWeatherIcon(sky, pty) {
@@ -80,10 +79,17 @@
       const url = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${serviceKey}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${nx}&ny=${ny}`;
 
       const res = await fetch(url);
-      const data = await res.json();
-      const items = data.response.body.items.item;
+      const text = await res.text();
 
-      // 현재 시각과 가장 가까운 fcstTime 찾기
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error("기상청 응답이 JSON이 아닙니다. 응답 내용:", text);
+        throw new Error("JSON 파싱 오류: 서비스키 또는 요청 URL이 잘못됐을 가능성.");
+      }
+
+      const items = data.response.body.items.item;
       const nowHour = now.getHours();
       const targetDate = formatDate(now);
 
@@ -96,9 +102,8 @@
       });
 
       const filtered = sameDateItems.filter(i => i.fcstTime === closestFcstTime);
-      const weather = {
-        TMP: '오류', SKY: '', PTY: '', REH: '오류', WSD: '오류'
-      };
+      const weather = { TMP: '오류', SKY: '', PTY: '', REH: '오류', WSD: '오류' };
+
       filtered.forEach(item => {
         if (weather[item.category] !== undefined) weather[item.category] = item.fcstValue;
       });
