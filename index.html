@@ -3,16 +3,50 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>예보 시간 확인</title>
+  <title>현재 동탄의 날씨</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #eef2f3;
+      text-align: center;
+      padding: 2rem;
+    }
+    .loading {
+      font-size: 1.5rem;
+      margin-top: 3rem;
+    }
+    .weather-box {
+      display: inline-block;
+      background: white;
+      border-radius: 1rem;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      padding: 1.5rem;
+      margin: 1rem;
+      min-width: 250px;
+    }
+    .weather-box img {
+      width: 80px;
+      height: 80px;
+    }
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 2rem;
+    }
+    h2 {
+      margin-bottom: 0.5rem;
+    }
+  </style>
 </head>
 <body>
-  <h1>예보 데이터 시각 확인</h1>
-  <pre id="output">불러오는 중...</pre>
+  <h1 id="title">동탄 날씨</h1>
+  <div class="loading" id="loading">🌤️ 날씨 정보를 불러오는 중...</div>
+  <div id="weatherContainer" style="display:none;"></div>
 
   <script>
-    const serviceKey = 'UX0oUh7ZWRuQW2qnng2rzw8U14zs2TmY9DYi8Eqs0SDQpo1wMe0l/BtVqaYcl7LYEJP0wysrk3xmQFgeE5iTJQ==
-';
-    const nx = 60, ny = 120;
+    const serviceKey = '여기에_기상청_API_서비스키_입력';
+    const nx = 60, ny = 120; // 동탄
+
+    const baseTimes = ["2300", "2000", "1700", "1400", "1100", "0800", "0500", "0200"];
 
     function formatDate(date) {
       const yyyy = date.getFullYear();
@@ -21,38 +55,90 @@
       return `${yyyy}${mm}${dd}`;
     }
 
-    function getBaseTime() {
-      const hour = new Date().getHours();
-      if (hour < 2) return "2300";
-      if (hour < 5) return "0200";
-      if (hour < 8) return "0500";
-      if (hour < 11) return "0800";
-      if (hour < 14) return "1100";
-      if (hour < 17) return "1400";
-      if (hour < 20) return "1700";
-      if (hour < 23) return "2000";
-      return "2300";
+    function getLatestBaseTime() {
+      const now = new Date();
+      const hour = now.getHours();
+      for (let base of baseTimes) {
+        if (hour >= parseInt(base.slice(0, 2))) return base;
+      }
+      return "2300"; // 새벽 2시 이전
     }
 
-    async function checkForecastTimes() {
-      const base_date = formatDate(new Date());
-      const base_time = getBaseTime();
-      const url = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${serviceKey}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${base_date}&base_time=${base_time}&nx=${nx}&ny=${ny}`;
+    function getWeatherIcon(sky, pty) {
+      if (pty === "1" || pty === "4") return "rain.png";
+      if (pty === "3") return "snow.png";
+      if (sky === "1") return "sunny.png";
+      if (sky === "3" || sky === "4") return "cloudy.png";
+      return "unknown.png";
+    }
 
+    async function fetchWeather() {
+      const now = new Date();
+      const baseDate = formatDate(now);
+      const baseTime = getLatestBaseTime();
+
+      const url = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${serviceKey}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${nx}&ny=${ny}`;
+
+      const res = await fetch(url);
+      const data = await res.json();
+      const items = data.response.body.items.item;
+
+      // 현재 시각과 가장 가까운 fcstTime 찾기
+      const nowHour = now.getHours();
+      const targetDate = formatDate(now);
+
+      const sameDateItems = items.filter(i => i.fcstDate === targetDate);
+      const availableTimes = [...new Set(sameDateItems.map(i => i.fcstTime))];
+      const closestFcstTime = availableTimes.reduce((prev, curr) => {
+        const prevDiff = Math.abs(parseInt(prev) - nowHour * 100);
+        const currDiff = Math.abs(parseInt(curr) - nowHour * 100);
+        return currDiff < prevDiff ? curr : prev;
+      });
+
+      const filtered = sameDateItems.filter(i => i.fcstTime === closestFcstTime);
+      const weather = {
+        TMP: '오류', SKY: '', PTY: '', REH: '오류', WSD: '오류'
+      };
+      filtered.forEach(item => {
+        if (weather[item.category] !== undefined) weather[item.category] = item.fcstValue;
+      });
+
+      const icon = getWeatherIcon(weather.SKY, weather.PTY);
+      return {
+        title: `현재 동탄의 날씨 (${String(parseInt(closestFcstTime) / 100).padStart(2, '0')}시 기준)`,
+        temperature: weather.TMP + "°C",
+        humidity: weather.REH + "%",
+        wind: weather.WSD + "m/s",
+        icon
+      };
+    }
+
+    async function displayWeather() {
       try {
-        const res = await fetch(url);
-        const json = await res.json();
-        const items = json.response.body.items.item;
+        const data = await fetchWeather();
+        document.getElementById("title").textContent = data.title;
 
-        const times = Array.from(new Set(items.map(i => `${i.fcstDate} ${i.fcstTime}`))).sort();
-        const output = times.join('\n');
-        document.getElementById('output').textContent = `▶ 현재 base_date=${base_date}, base_time=${base_time}\n\n${output}`;
+        const box = document.createElement("div");
+        box.className = "weather-box";
+        box.innerHTML = `
+          <img src="images/${data.icon}" alt="날씨 아이콘">
+          <p>🌡️ 온도: ${data.temperature}</p>
+          <p>💧 습도: ${data.humidity}</p>
+          <p>🌬️ 풍속: ${data.wind}</p>
+        `;
+
+        const container = document.getElementById("weatherContainer");
+        container.appendChild(box);
+        document.getElementById("loading").style.display = "none";
+        container.style.display = "flex";
+        container.style.justifyContent = "center";
       } catch (e) {
-        document.getElementById('output').textContent = "API 호출 실패: " + e.message;
+        document.getElementById("loading").textContent = "⚠️ 날씨 정보를 불러올 수 없습니다.";
+        console.error("에러 발생:", e);
       }
     }
 
-    checkForecastTimes();
+    displayWeather();
   </script>
 </body>
 </html>
