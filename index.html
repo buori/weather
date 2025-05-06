@@ -43,9 +43,7 @@
   <div id="weatherContainer" style="display:none;"></div>
 
   <script>
-    // 서비스 키를 인코딩된 형태로 넣어야 함
-    const rawServiceKey = 'UX0oUh7ZWRuQW2qnng2rzw8U14zs2TmY9DYi8Eqs0SDQpo1wMe0l%2FBtVqaYcl7LYEJP0wysrk3xmQFgeE5iTJQ%3D%3D
-';
+    const rawServiceKey = 'UX0oUh7ZWRuQW2qnng2rzw8U14zs2TmY9DYi8Eqs0SDQpo1wMe0l/BtVqaYcl7LYEJP0wysrk3xmQFgeE5iTJQ==';
     const serviceKey = encodeURIComponent(rawServiceKey);  // 서비스 키 인코딩
     const nx = 60, ny = 120; // 동탄 좌표
 
@@ -82,31 +80,54 @@
       const base_time = getBaseTime();
 
       const url = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${serviceKey}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${base_date}&base_time=${base_time}&nx=${nx}&ny=${ny}`;
+      
+      try {
+        const res = await fetch(url);
+        
+        // 응답이 JSON이 아닌 경우, 에러 메시지를 콘솔에 출력
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
 
-      const res = await fetch(url);
-      const data = await res.json();
-      const items = data.response.body.items.item;
+        const data = await res.json();
 
-      const targetDate = new Date();
-      targetDate.setDate(targetDate.getDate() + date);
-      const targetDateStr = formatDate(targetDate);
+        // 응답이 JSON이 아닌 경우 처리
+        if (!data || !data.response || !data.response.body || !data.response.body.items) {
+          throw new Error("응답 데이터가 유효한 JSON이 아닙니다.");
+        }
 
-      const filtered = items.filter(i => i.fcstDate === targetDateStr && i.fcstTime === "1500");
-      const weather = {
-        TMP: '정보 없음', SKY: '', PTY: '', REH: '정보 없음', WSD: '정보 없음'
-      };
-      filtered.forEach(item => {
-        if (weather[item.category] !== undefined) weather[item.category] = item.fcstValue;
-      });
+        const items = data.response.body.items.item;
 
-      const icon = getWeatherIcon(weather.SKY, weather.PTY);
-      return {
-        label,
-        temperature: weather.TMP + "°C",
-        humidity: weather.REH + "%",
-        wind: weather.WSD + "m/s",
-        icon
-      };
+        const targetDate = new Date();
+        targetDate.setDate(targetDate.getDate() + date);
+        const targetDateStr = formatDate(targetDate);
+
+        const filtered = items.filter(i => i.fcstDate === targetDateStr && i.fcstTime === "1500");
+        const weather = {
+          TMP: '정보 없음', SKY: '', PTY: '', REH: '정보 없음', WSD: '정보 없음'
+        };
+        filtered.forEach(item => {
+          if (weather[item.category] !== undefined) weather[item.category] = item.fcstValue;
+        });
+
+        const icon = getWeatherIcon(weather.SKY, weather.PTY);
+        return {
+          label,
+          temperature: weather.TMP + "°C",
+          humidity: weather.REH + "%",
+          wind: weather.WSD + "m/s",
+          icon
+        };
+      } catch (error) {
+        console.error("기상청 API 호출 중 오류:", error);
+        return {
+          label,
+          temperature: "정보 없음",
+          humidity: "정보 없음",
+          wind: "정보 없음",
+          icon: "error.png"
+        };
+      }
     }
 
     async function displayWeather() {
